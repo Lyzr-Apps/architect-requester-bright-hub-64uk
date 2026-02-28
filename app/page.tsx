@@ -129,18 +129,94 @@ export default function Page() {
   // Active agent tracking
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
 
+  // ---- Helpers ----
+  const getSettings = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('mediahub_settings')
+      if (stored) return JSON.parse(stored)
+    } catch {}
+    return null
+  }, [])
+
   // ---- Handlers ----
-  const handleSync = useCallback(async (discordContent: string) => {
+  const handleSync = useCallback(async () => {
     setSyncing(true)
     setSyncError('')
     setLastSyncSummary('')
     setActiveAgentId(MANAGER_AGENT_ID)
     try {
-      const message = `Sync media requests from Discord. Parse the following raw Discord thread channel content. Extract every single media request post — each title, IMDb link, requester username, and channel. Classify each as movie or tv_show and route movies to Radarr and TV shows to Sonarr. Do NOT return 0 results if there are posts below.\n\n--- BEGIN DISCORD CHANNEL CONTENT ---\n${discordContent}\n--- END DISCORD CHANNEL CONTENT ---`
-      const result = await callAIAgent(
-        message,
-        MANAGER_AGENT_ID
-      )
+      // Step 1: Read settings from localStorage
+      const settings = getSettings()
+      if (!settings?.discord_bot_token) {
+        setSyncError('Discord Bot Token is not configured. Go to Settings and add your Bot Token, Server ID, and Channel IDs.')
+        setSyncing(false)
+        setActiveAgentId(null)
+        return
+      }
+      const channelIds: string[] = []
+      const channelLabels: string[] = []
+      if (settings.discord_movies_channel?.trim()) {
+        channelIds.push(settings.discord_movies_channel.trim())
+        channelLabels.push('movies')
+      }
+      if (settings.discord_tv_channel?.trim()) {
+        channelIds.push(settings.discord_tv_channel.trim())
+        channelLabels.push('tv-shows')
+      }
+      if (channelIds.length === 0) {
+        setSyncError('No Discord channel IDs configured. Go to Settings and add your Movies and/or TV Shows Channel IDs.')
+        setSyncing(false)
+        setActiveAgentId(null)
+        return
+      }
+
+      // Step 2: Fetch messages from Discord via our API route
+      const discordRes = await fetch('/api/discord', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bot_token: settings.discord_bot_token,
+          channel_ids: channelIds,
+          channel_labels: channelLabels,
+        }),
+      })
+      const discordData = await discordRes.json()
+
+      if (!discordData.success && discordData.total_messages === 0) {
+        setSyncError(discordData.error || 'Failed to fetch messages from Discord. Check your Bot Token and Channel IDs in Settings.')
+        setSyncing(false)
+        setActiveAgentId(null)
+        return
+      }
+
+      // Step 3: Format Discord messages into readable text for the agent
+      let discordContent = ''
+      const channels = Array.isArray(discordData.channels) ? discordData.channels : []
+      for (const channel of channels) {
+        const label = channel.channel_label || 'unknown'
+        const messages = Array.isArray(channel.messages) ? channel.messages : []
+        if (messages.length > 0) {
+          discordContent += `\n=== #${label} channel (${messages.length} messages) ===\n`
+          for (const msg of messages) {
+            if (msg.content && msg.content.trim()) {
+              discordContent += `${msg.author?.username || 'Unknown'}: ${msg.content}\n`
+            }
+          }
+        }
+      }
+
+      if (!discordContent.trim()) {
+        setSyncError('No messages found in the configured Discord channels. Make sure the channels have posts with media requests.')
+        setSyncing(false)
+        setActiveAgentId(null)
+        return
+      }
+
+      // Step 4: Send the fetched content to the AI agent for parsing
+      const agentMessage = `Sync media requests from Discord. Parse the following raw Discord thread channel content. Extract every single media request post — each title, IMDb link, requester username, and channel. Classify each as movie or tv_show and route movies to Radarr and TV shows to Sonarr. Do NOT return 0 results if there are posts below.\n\n--- BEGIN DISCORD CHANNEL CONTENT ---\n${discordContent}\n--- END DISCORD CHANNEL CONTENT ---`
+
+      const result = await callAIAgent(agentMessage, MANAGER_AGENT_ID)
+
       if (result.success && result.response?.result) {
         const data = result.response.result
         const newRequests = Array.isArray(data?.requests) ? data.requests : []
@@ -151,10 +227,12 @@ export default function Page() {
           return [...prev, ...uniqueNew]
         })
         const count = newRequests.length
-        setLastSyncSummary(data?.summary ?? `Synced ${count} requests. Movies: ${data?.movies_count ?? 0}, TV Shows: ${data?.tv_shows_count ?? 0}.`)
+        setLastSyncSummary(
+          data?.summary ?? `Synced ${count} requests from ${channels.length} channel(s). Movies: ${data?.movies_count ?? 0}, TV Shows: ${data?.tv_shows_count ?? 0}.`
+        )
       } else {
-        const errMsg = result.error ?? result.response?.message ?? 'Failed to sync from Discord.'
-        setSyncError(typeof errMsg === 'string' ? errMsg : 'Failed to sync from Discord.')
+        const errMsg = result.error ?? result.response?.message ?? 'Failed to parse Discord content.'
+        setSyncError(typeof errMsg === 'string' ? errMsg : 'Failed to parse Discord content.')
       }
     } catch (err) {
       setSyncError('An unexpected error occurred during sync.')
@@ -162,7 +240,7 @@ export default function Page() {
       setSyncing(false)
       setActiveAgentId(null)
     }
-  }, [])
+  }, [getSettings])
 
   const handleNewRequest = useCallback(async (title: string, imdbLink: string, mediaType: string) => {
     setSubmitting(true)
