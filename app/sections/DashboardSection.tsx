@@ -25,7 +25,7 @@ interface MediaRequest {
 interface DashboardSectionProps {
   requests: MediaRequest[]
   syncing: boolean
-  onSync: () => void
+  onSync: (discordContent: string) => void
   onSelectRequest: (req: MediaRequest) => void
   onNewRequest: () => void
   showSample: boolean
@@ -52,6 +52,8 @@ export default function DashboardSection({ requests, syncing, onSync, onSelectRe
   const [filterChannel, setFilterChannel] = useState<string>('all')
   const [sortField, setSortField] = useState<SortField>('title')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [showSyncPanel, setShowSyncPanel] = useState(false)
+  const [discordContent, setDiscordContent] = useState('')
 
   const displayRequests = showSample ? SAMPLE_REQUESTS : requests
 
@@ -117,12 +119,53 @@ export default function DashboardSection({ requests, syncing, onSync, onSelectRe
             <Switch id="sample-toggle" checked={showSample} onCheckedChange={onToggleSample} />
             <Label htmlFor="sample-toggle" className="text-sm text-muted-foreground cursor-pointer">Sample Data</Label>
           </div>
-          <Button onClick={onSync} disabled={syncing} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all duration-200">
+          <Button onClick={() => setShowSyncPanel(prev => !prev)} disabled={syncing} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all duration-200">
             {syncing ? <RiLoader4Line className="h-4 w-4 mr-2 animate-spin" /> : <RiRefreshLine className="h-4 w-4 mr-2" />}
             {syncing ? 'Syncing...' : 'Sync from Discord'}
           </Button>
         </div>
       </div>
+
+      {/* Sync Content Panel */}
+      {showSyncPanel && (
+        <Card className="bg-card border-border shadow-xl" style={{ borderRadius: '0.875rem' }}>
+          <CardContent className="p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-1">Paste Discord Channel Content</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Copy posts from your Discord movie/TV request channels and paste them below. The agent will parse all titles, IMDb links, and requester info from the content.
+              </p>
+              <textarea
+                value={discordContent}
+                onChange={(e) => setDiscordContent(e.target.value)}
+                placeholder={"Paste Discord thread posts here...\n\nExample format:\nFilmFan42: Dune: Part Two (2024) - https://www.imdb.com/title/tt15239678/\nSeriesLover: The Bear - https://www.imdb.com/title/tt14452776/\nMovieBuff: Oppenheimer (2023) https://imdb.com/title/tt15398776"}
+                rows={8}
+                className="w-full bg-input border border-border rounded-xl p-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring resize-y font-mono"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => { onSync(discordContent); }}
+                disabled={syncing || !discordContent.trim()}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25"
+              >
+                {syncing ? <RiLoader4Line className="h-4 w-4 mr-2 animate-spin" /> : <RiRefreshLine className="h-4 w-4 mr-2" />}
+                {syncing ? 'Parsing...' : 'Parse & Import'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => { setShowSyncPanel(false); setDiscordContent('') }}
+                className="border-border text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </Button>
+              {!discordContent.trim() && (
+                <span className="text-xs text-muted-foreground">Paste Discord content above to enable sync</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sync feedback */}
       {lastSyncSummary && (
@@ -202,7 +245,7 @@ export default function DashboardSection({ requests, syncing, onSync, onSelectRe
                 <RiFileListLine className="h-12 w-12 text-muted-foreground/40 mb-4" />
                 <p className="text-sm font-medium text-muted-foreground mb-2">No requests yet</p>
                 <p className="text-xs text-muted-foreground/70 mb-4 text-center">Sync from Discord to import media requests, or add a new one manually.</p>
-                <Button onClick={onSync} disabled={syncing} variant="outline" className="border-primary text-primary hover:bg-primary/10">
+                <Button onClick={() => setShowSyncPanel(true)} disabled={syncing} variant="outline" className="border-primary text-primary hover:bg-primary/10">
                   {syncing ? <RiLoader4Line className="h-4 w-4 mr-2 animate-spin" /> : <RiRefreshLine className="h-4 w-4 mr-2" />}
                   Sync from Discord
                 </Button>

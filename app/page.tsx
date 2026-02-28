@@ -130,23 +130,31 @@ export default function Page() {
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
 
   // ---- Handlers ----
-  const handleSync = useCallback(async () => {
+  const handleSync = useCallback(async (discordContent: string) => {
     setSyncing(true)
     setSyncError('')
     setLastSyncSummary('')
     setActiveAgentId(MANAGER_AGENT_ID)
     try {
+      const message = `Sync media requests from Discord. Parse the following raw Discord thread channel content. Extract every single media request post — each title, IMDb link, requester username, and channel. Classify each as movie or tv_show and route movies to Radarr and TV shows to Sonarr. Do NOT return 0 results if there are posts below.\n\n--- BEGIN DISCORD CHANNEL CONTENT ---\n${discordContent}\n--- END DISCORD CHANNEL CONTENT ---`
       const result = await callAIAgent(
-        'Sync all media requests from Discord thread channels. Parse both the movies and tv-shows channels, extract all titles and IMDb links, classify each as movie or TV show, and route to the appropriate service (Radarr for movies, Sonarr for TV shows).',
+        message,
         MANAGER_AGENT_ID
       )
       if (result.success && result.response?.result) {
         const data = result.response.result
         const newRequests = Array.isArray(data?.requests) ? data.requests : []
-        setRequests(newRequests)
-        setLastSyncSummary(data?.summary ?? `Synced ${data?.total_processed ?? 0} requests. Movies: ${data?.movies_count ?? 0}, TV Shows: ${data?.tv_shows_count ?? 0}. Successes: ${data?.successes ?? 0}, Failures: ${data?.failures ?? 0}.`)
+        // Merge: add new requests that don't already exist (by imdb_id)
+        setRequests(prev => {
+          const existingIds = new Set(prev.map(r => r.imdb_id))
+          const uniqueNew = newRequests.filter((r: MediaRequest) => r?.imdb_id && !existingIds.has(r.imdb_id))
+          return [...prev, ...uniqueNew]
+        })
+        const count = newRequests.length
+        setLastSyncSummary(data?.summary ?? `Synced ${count} requests. Movies: ${data?.movies_count ?? 0}, TV Shows: ${data?.tv_shows_count ?? 0}.`)
       } else {
-        setSyncError(result.error ?? result.response?.message ?? 'Failed to sync from Discord.')
+        const errMsg = result.error ?? result.response?.message ?? 'Failed to sync from Discord.'
+        setSyncError(typeof errMsg === 'string' ? errMsg : 'Failed to sync from Discord.')
       }
     } catch (err) {
       setSyncError('An unexpected error occurred during sync.')
