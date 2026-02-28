@@ -1,0 +1,240 @@
+{
+  "workflow": {
+    "nodes": [
+      {
+        "id": "input_node",
+        "type": "Input",
+        "label": "User Action (Sync/Submit)",
+        "nodeCategory": "input"
+      },
+      {
+        "id": "manager_agent",
+        "type": "Agent",
+        "label": "Media Request Coordinator",
+        "nodeCategory": "agent",
+        "agent_id": "69a283adc36765d79726f134",
+        "agent_name": "Media Request Coordinator",
+        "is_manager": true,
+        "managed_agents": [
+          "69a2838d00b22915dd81e186",
+          "69a2838de72641e0c6070aa7",
+          "69a2838d0082f39a3a37cdfd"
+        ]
+      },
+      {
+        "id": "discord_parser",
+        "type": "Agent",
+        "label": "Discord Parser Agent",
+        "nodeCategory": "agent",
+        "agent_id": "69a2838d00b22915dd81e186",
+        "agent_name": "Discord Parser Agent",
+        "is_sub_agent": true
+      },
+      {
+        "id": "media_router",
+        "type": "Agent",
+        "label": "Media Router Agent",
+        "nodeCategory": "agent",
+        "agent_id": "69a2838de72641e0c6070aa7",
+        "agent_name": "Media Router Agent",
+        "is_sub_agent": true
+      },
+      {
+        "id": "discord_poster",
+        "type": "Agent",
+        "label": "Discord Poster Agent",
+        "nodeCategory": "agent",
+        "agent_id": "69a2838d0082f39a3a37cdfd",
+        "agent_name": "Discord Poster Agent",
+        "is_sub_agent": true
+      },
+      {
+        "id": "output_node",
+        "type": "Output",
+        "label": "Dashboard Output",
+        "nodeCategory": "end"
+      }
+    ],
+    "edges": [
+      { "source": "input_node", "target": "manager_agent" },
+      { "source": "manager_agent", "target": "discord_parser" },
+      { "source": "manager_agent", "target": "media_router" },
+      { "source": "manager_agent", "target": "discord_poster" },
+      { "source": "discord_parser", "target": "output_node" },
+      { "source": "media_router", "target": "output_node" },
+      { "source": "discord_poster", "target": "output_node" }
+    ]
+  },
+  "agents": {
+    "manager": {
+      "agent_id": "69a283adc36765d79726f134",
+      "name": "Media Request Coordinator",
+      "description": "Coordinates parsing of Discord posts and routing of media requests to appropriate services; aggregates results for dashboard display",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.2,
+      "top_p": 1,
+      "managed_agents": [
+        "69a2838d00b22915dd81e186",
+        "69a2838de72641e0c6070aa7",
+        "69a2838d0082f39a3a37cdfd"
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "AgentResponse",
+          "strict": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "workflow_type": { "type": "string" },
+              "total_processed": { "type": "number" },
+              "movies_count": { "type": "number" },
+              "tv_shows_count": { "type": "number" },
+              "successes": { "type": "number" },
+              "failures": { "type": "number" },
+              "requests": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": { "type": "string" },
+                    "imdb_id": { "type": "string" },
+                    "imdb_link": { "type": "string" },
+                    "media_type": { "type": "string" },
+                    "service": { "type": "string" },
+                    "status": { "type": "string" },
+                    "requester": { "type": "string" },
+                    "channel": { "type": "string" },
+                    "discord_post_status": { "type": "string" }
+                  },
+                  "required": ["title", "imdb_id", "imdb_link", "media_type", "service", "status", "requester", "channel", "discord_post_status"],
+                  "additionalProperties": false
+                }
+              },
+              "summary": { "type": "string" }
+            },
+            "required": ["workflow_type", "total_processed", "movies_count", "tv_shows_count", "successes", "failures", "requests", "summary"],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "sub_agents": [
+      {
+        "agent_id": "69a2838d00b22915dd81e186",
+        "name": "Discord Parser Agent",
+        "description": "Parses Discord thread posts to extract media titles, IMDb links, and request metadata from both movies and tv-shows channels",
+        "model": "gpt-4.1",
+        "provider": "openai",
+        "temperature": 0.1,
+        "top_p": 1,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "name": "AgentResponse",
+            "strict": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "parsed_requests": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "title": { "type": "string" },
+                      "imdb_link": { "type": "string" },
+                      "imdb_id": { "type": "string" },
+                      "requester": { "type": "string" },
+                      "timestamp": { "type": "string" },
+                      "channel": { "type": "string" },
+                      "missing_imdb_link": { "type": "boolean" }
+                    },
+                    "required": ["title", "imdb_link", "imdb_id", "requester", "timestamp", "channel", "missing_imdb_link"],
+                    "additionalProperties": false
+                  }
+                },
+                "total_count": { "type": "number" },
+                "channels_parsed": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["parsed_requests", "total_count", "channels_parsed"],
+              "additionalProperties": false
+            }
+          }
+        }
+      },
+      {
+        "agent_id": "69a2838de72641e0c6070aa7",
+        "name": "Media Router Agent",
+        "description": "Classifies media as movie or TV show using IMDb data, determines correct service (Radarr/Sonarr), and formats API-ready payloads",
+        "model": "gpt-4.1",
+        "provider": "openai",
+        "temperature": 0.1,
+        "top_p": 1,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "name": "AgentResponse",
+            "strict": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "routed_requests": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "title": { "type": "string" },
+                      "imdb_id": { "type": "string" },
+                      "media_type": { "type": "string" },
+                      "service": { "type": "string" },
+                      "status": { "type": "string" },
+                      "payload": { "type": "string" }
+                    },
+                    "required": ["title", "imdb_id", "media_type", "service", "status", "payload"],
+                    "additionalProperties": false
+                  }
+                },
+                "movies_count": { "type": "number" },
+                "tv_shows_count": { "type": "number" },
+                "total_routed": { "type": "number" }
+              },
+              "required": ["routed_requests", "movies_count", "tv_shows_count", "total_routed"],
+              "additionalProperties": false
+            }
+          }
+        }
+      },
+      {
+        "agent_id": "69a2838d0082f39a3a37cdfd",
+        "name": "Discord Poster Agent",
+        "description": "Generates formatted Discord messages for new website-submitted requests and posts to the appropriate thread channel (movies/tv-shows)",
+        "model": "gpt-4.1",
+        "provider": "openai",
+        "temperature": 0.3,
+        "top_p": 1,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "name": "AgentResponse",
+            "strict": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message_content": { "type": "string" },
+                "target_channel": { "type": "string" },
+                "channel_type": { "type": "string" },
+                "media_title": { "type": "string" },
+                "media_type": { "type": "string" },
+                "imdb_link": { "type": "string" },
+                "post_status": { "type": "string" }
+              },
+              "required": ["message_content", "target_channel", "channel_type", "media_title", "media_type", "imdb_link", "post_status"],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    ]
+  }
+}

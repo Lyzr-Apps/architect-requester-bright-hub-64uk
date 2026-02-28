@@ -1,0 +1,56 @@
+{
+  "app_name": "MediaHub - Discord Media Request Manager",
+  "created_at": "2026-02-28",
+  "agent_ids": {
+    "media_request_coordinator": "69a283adc36765d79726f134",
+    "discord_parser_agent": "69a2838d00b22915dd81e186",
+    "media_router_agent": "69a2838de72641e0c6070aa7",
+    "discord_poster_agent": "69a2838d0082f39a3a37cdfd"
+  },
+  "manager_agent_id": "69a283adc36765d79726f134",
+  "sub_agent_ids": [
+    "69a2838d00b22915dd81e186",
+    "69a2838de72641e0c6070aa7",
+    "69a2838d0082f39a3a37cdfd"
+  ],
+  "workflow_pattern": "manager-subagent",
+  "agent_details": {
+    "69a283adc36765d79726f134": {
+      "name": "Media Request Coordinator",
+      "role": "manager",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.2,
+      "capabilities": ["text"],
+      "managed_agents": [
+        "69a2838d00b22915dd81e186",
+        "69a2838de72641e0c6070aa7",
+        "69a2838d0082f39a3a37cdfd"
+      ]
+    },
+    "69a2838d00b22915dd81e186": {
+      "name": "Discord Parser Agent",
+      "role": "sub_agent",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.1,
+      "capabilities": ["text"]
+    },
+    "69a2838de72641e0c6070aa7": {
+      "name": "Media Router Agent",
+      "role": "sub_agent",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.1,
+      "capabilities": ["text"]
+    },
+    "69a2838d0082f39a3a37cdfd": {
+      "name": "Discord Poster Agent",
+      "role": "sub_agent",
+      "model": "gpt-4.1",
+      "provider": "openai",
+      "temperature": 0.3,
+      "capabilities": ["text"]
+    }
+  }
+}

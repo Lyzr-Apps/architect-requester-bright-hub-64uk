@@ -1,0 +1,60 @@
+{
+  "agent_name": "Media Request Coordinator",
+  "agent_id": "69a283adc36765d79726f134",
+  "description": "Coordinates parsing of Discord posts and routing of media requests to appropriate services; aggregates results for dashboard display",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "workflow_type": "string",
+    "total_processed": "number",
+    "movies_count": "number",
+    "tv_shows_count": "number",
+    "successes": "number",
+    "failures": "number",
+    "requests": [
+      {
+        "title": "string",
+        "imdb_id": "string",
+        "imdb_link": "string",
+        "media_type": "string",
+        "service": "string",
+        "status": "string",
+        "requester": "string",
+        "channel": "string",
+        "discord_post_status": "string"
+      }
+    ],
+    "summary": "string"
+  },
+  "example_response": {
+    "workflow_type": "sample string",
+    "total_processed": 0,
+    "movies_count": 0,
+    "tv_shows_count": 0,
+    "successes": 0,
+    "failures": 0,
+    "requests": [
+      {
+        "title": "sample string",
+        "imdb_id": "sample string",
+        "imdb_link": "sample string",
+        "media_type": "sample string",
+        "service": "sample string",
+        "status": "sample string",
+        "requester": "sample string",
+        "channel": "sample string",
+        "discord_post_status": "sample string"
+      }
+    ],
+    "summary": "sample string"
+  },
+  "has_module_outputs": true,
+  "module_outputs_example": {
+    "artifact_files": [
+      {
+        "file_url": "https://example.com/image.png"
+      }
+    ]
+  }
+}
