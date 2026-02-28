@@ -32,6 +32,7 @@ interface DashboardSectionProps {
   onToggleSample: (val: boolean) => void
   lastSyncSummary: string
   syncError: string
+  viewMode?: 'dashboard' | 'requests'
 }
 
 type SortField = 'title' | 'media_type' | 'status' | 'channel'
@@ -45,7 +46,7 @@ const SAMPLE_REQUESTS: MediaRequest[] = [
   { title: 'Civil War', imdb_id: 'tt17279496', imdb_link: 'https://www.imdb.com/title/tt17279496/', media_type: 'movie', service: 'Radarr', status: 'downloading', requester: 'ActionHero', channel: 'movies', discord_post_status: 'posted' },
 ]
 
-export default function DashboardSection({ requests, syncing, onSync, onSelectRequest, onNewRequest, showSample, onToggleSample, lastSyncSummary, syncError }: DashboardSectionProps) {
+export default function DashboardSection({ requests, syncing, onSync, onSelectRequest, onNewRequest, showSample, onToggleSample, lastSyncSummary, syncError, viewMode = 'dashboard' }: DashboardSectionProps) {
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
@@ -108,49 +109,85 @@ export default function DashboardSection({ requests, syncing, onSync, onSelectRe
 
   return (
     <div className="space-y-6">
-      {/* Top Bar */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground" style={{ letterSpacing: '-0.01em' }}>MediaHub</h1>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Switch id="sample-toggle" checked={showSample} onCheckedChange={onToggleSample} />
-            <Label htmlFor="sample-toggle" className="text-sm text-muted-foreground cursor-pointer">Sample Data</Label>
+      {viewMode === 'dashboard' ? (
+        <>
+          {/* Top Bar */}
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground" style={{ letterSpacing: '-0.01em' }}>MediaHub</h1>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch id="sample-toggle" checked={showSample} onCheckedChange={onToggleSample} />
+                <Label htmlFor="sample-toggle" className="text-sm text-muted-foreground cursor-pointer">Sample Data</Label>
+              </div>
+              <Button onClick={onSync} disabled={syncing} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all duration-200">
+                {syncing ? <RiLoader4Line className="h-4 w-4 mr-2 animate-spin" /> : <RiRefreshLine className="h-4 w-4 mr-2" />}
+                {syncing ? 'Syncing...' : 'Sync from Discord'}
+              </Button>
+            </div>
           </div>
-          <Button onClick={onSync} disabled={syncing} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all duration-200">
-            {syncing ? <RiLoader4Line className="h-4 w-4 mr-2 animate-spin" /> : <RiRefreshLine className="h-4 w-4 mr-2" />}
-            {syncing ? 'Syncing...' : 'Sync from Discord'}
-          </Button>
-        </div>
-      </div>
 
-      {/* Sync feedback */}
-      {lastSyncSummary && (
-        <div className="rounded-xl px-4 py-3 text-sm border border-[hsl(135,94%,60%)]/30 bg-[hsl(135,94%,60%)]/10 text-[hsl(135,94%,60%)]">
-          {lastSyncSummary}
-        </div>
-      )}
-      {syncError && (
-        <div className="rounded-xl px-4 py-3 text-sm border border-destructive/30 bg-destructive/10 text-destructive">
-          {syncError}
-        </div>
-      )}
+          {/* Sync feedback */}
+          {lastSyncSummary && (
+            <div className="rounded-xl px-4 py-3 text-sm border border-[hsl(135,94%,60%)]/30 bg-[hsl(135,94%,60%)]/10 text-[hsl(135,94%,60%)]">
+              {lastSyncSummary}
+            </div>
+          )}
+          {syncError && (
+            <div className="rounded-xl px-4 py-3 text-sm border border-destructive/30 bg-destructive/10 text-destructive">
+              {syncError}
+            </div>
+          )}
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {STAT_CARDS.map((card) => (
-          <Card key={card.label} className="bg-card border-border shadow-lg hover:shadow-xl transition-all duration-300" style={{ borderRadius: '0.875rem' }}>
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className="flex items-center justify-center w-12 h-12 rounded-xl" style={{ background: `${card.color}20`, color: card.color }}>
-                {card.icon}
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{card.value}</p>
-                <p className="text-xs text-muted-foreground font-medium">{card.label}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+          {/* Stat Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {STAT_CARDS.map((card) => (
+              <Card key={card.label} className="bg-card border-border shadow-lg hover:shadow-xl transition-all duration-300" style={{ borderRadius: '0.875rem' }}>
+                <CardContent className="p-5 flex items-center gap-4">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-xl" style={{ background: `${card.color}20`, color: card.color }}>
+                    {card.icon}
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-foreground">{card.value}</p>
+                    <p className="text-xs text-muted-foreground font-medium">{card.label}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Requests Page Header */}
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground" style={{ letterSpacing: '-0.01em' }}>Requests</h1>
+              <p className="text-sm text-muted-foreground mt-1">{totalCount} total request{totalCount !== 1 ? 's' : ''} — {moviesCount} movie{moviesCount !== 1 ? 's' : ''}, {tvCount} TV show{tvCount !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button onClick={onNewRequest} variant="outline" className="border-primary text-primary hover:bg-primary/10">
+                <RiAddCircleLine className="h-4 w-4 mr-2" />
+                New Request
+              </Button>
+              <Button onClick={onSync} disabled={syncing} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25">
+                {syncing ? <RiLoader4Line className="h-4 w-4 mr-2 animate-spin" /> : <RiRefreshLine className="h-4 w-4 mr-2" />}
+                {syncing ? 'Syncing...' : 'Sync'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Sync feedback on requests page too */}
+          {lastSyncSummary && (
+            <div className="rounded-xl px-4 py-3 text-sm border border-[hsl(135,94%,60%)]/30 bg-[hsl(135,94%,60%)]/10 text-[hsl(135,94%,60%)]">
+              {lastSyncSummary}
+            </div>
+          )}
+          {syncError && (
+            <div className="rounded-xl px-4 py-3 text-sm border border-destructive/30 bg-destructive/10 text-destructive">
+              {syncError}
+            </div>
+          )}
+        </>
+      )}
 
       {/* Search & Filters */}
       <div className="space-y-3">
@@ -187,7 +224,7 @@ export default function DashboardSection({ requests, syncing, onSync, onSelectRe
         <ScrollArea className="w-full">
           <div className="min-w-[640px]">
             {/* Header */}
-            <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 px-5 py-3 border-b border-border bg-secondary/50">
+            <div className="grid grid-cols-[3fr_100px_110px_100px_120px] gap-3 px-5 py-3 border-b border-border bg-secondary/50 items-center">
               <button onClick={() => toggleSort('title')} className="text-xs font-semibold text-muted-foreground text-left hover:text-foreground transition-colors">Title <SortIcon field="title" /></button>
               <button onClick={() => toggleSort('media_type')} className="text-xs font-semibold text-muted-foreground text-left hover:text-foreground transition-colors">Type <SortIcon field="media_type" /></button>
               <button onClick={() => toggleSort('status')} className="text-xs font-semibold text-muted-foreground text-left hover:text-foreground transition-colors">Status <SortIcon field="status" /></button>
@@ -208,12 +245,12 @@ export default function DashboardSection({ requests, syncing, onSync, onSelectRe
               </div>
             ) : (
               filtered.map((req, idx) => (
-                <button key={`${req.imdb_id}-${idx}`} onClick={() => onSelectRequest(req)} className="w-full grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 px-5 py-3 border-b border-border/50 hover:bg-secondary/40 transition-all duration-150 text-left cursor-pointer">
-                  <span className="text-sm font-medium text-foreground truncate">{req.title ?? 'Untitled'}</span>
+                <button key={`${req.imdb_id}-${idx}`} onClick={() => onSelectRequest(req)} className="w-full grid grid-cols-[3fr_100px_110px_100px_120px] gap-3 px-5 py-3 border-b border-border/50 hover:bg-secondary/40 transition-all duration-150 text-left cursor-pointer items-center">
+                  <span className="text-sm font-medium text-foreground min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{req.title ?? 'Untitled'}</span>
                   <span><Badge className={`text-xs ${typeColor(req.media_type)}`}>{req.media_type === 'movie' ? 'Movie' : 'TV Show'}</Badge></span>
                   <span><Badge className={`text-xs ${statusColor(req.status)}`}>{req.status ? req.status.charAt(0).toUpperCase() + req.status.slice(1) : 'Unknown'}</Badge></span>
-                  <span className="text-xs text-muted-foreground self-center">#{req.channel ?? 'unknown'}</span>
-                  <span className="text-xs text-muted-foreground self-center truncate">{req.requester ?? 'Unknown'}</span>
+                  <span className="text-xs text-muted-foreground">#{req.channel ?? 'unknown'}</span>
+                  <span className="text-xs text-muted-foreground min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{req.requester ?? 'Unknown'}</span>
                 </button>
               ))
             )}

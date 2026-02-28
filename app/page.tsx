@@ -178,6 +178,7 @@ export default function Page() {
           bot_token: settings.discord_bot_token,
           channel_ids: channelIds,
           channel_labels: channelLabels,
+          server_id: settings.discord_server_id || undefined,
         }),
       })
       const discordData = await discordRes.json()
@@ -327,6 +328,7 @@ export default function Page() {
                 onToggleSample={setShowSample}
                 lastSyncSummary={lastSyncSummary}
                 syncError={syncError}
+                viewMode={activeSection === 'requests' ? 'requests' : 'dashboard'}
               />
             )}
 

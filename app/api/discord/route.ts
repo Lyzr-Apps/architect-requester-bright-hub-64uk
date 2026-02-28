@@ -29,48 +29,75 @@ const DISCORD_API_BASE = 'https://discord.com/api/v10'
 async function fetchChannelMessages(
   channelId: string,
   botToken: string,
-  limit: number = 100
+  maxMessages: number = 500
 ): Promise<{ messages: DiscordMessage[]; error?: string }> {
+  const allMessages: DiscordMessage[] = []
+  let beforeId: string | undefined = undefined
+  let hasMore = true
+
   try {
-    const res = await fetch(
-      `${DISCORD_API_BASE}/channels/${channelId}/messages?limit=${limit}`,
-      {
+    while (hasMore && allMessages.length < maxMessages) {
+      const batchSize = Math.min(100, maxMessages - allMessages.length)
+      let url = `${DISCORD_API_BASE}/channels/${channelId}/messages?limit=${batchSize}`
+      if (beforeId) {
+        url += `&before=${beforeId}`
+      }
+
+      const res = await fetch(url, {
         headers: {
           Authorization: `Bot ${botToken}`,
           'Content-Type': 'application/json',
         },
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        let errorMsg = `Discord API error: ${res.status}`
+        try {
+          const errorJson = JSON.parse(errorText)
+          errorMsg = errorJson.message || errorMsg
+        } catch {}
+        // If we already have some messages, return what we have with the error
+        if (allMessages.length > 0) {
+          return { messages: allMessages, error: errorMsg }
+        }
+        return { messages: [], error: errorMsg }
       }
-    )
 
-    if (!res.ok) {
-      const errorText = await res.text()
-      let errorMsg = `Discord API error: ${res.status}`
-      try {
-        const errorJson = JSON.parse(errorText)
-        errorMsg = errorJson.message || errorMsg
-      } catch {}
-      return { messages: [], error: errorMsg }
+      const data = await res.json()
+
+      if (!Array.isArray(data) || data.length === 0) {
+        hasMore = false
+        break
+      }
+
+      const batch: DiscordMessage[] = data.map((msg: any) => ({
+        id: msg.id,
+        content: msg.content || '',
+        author: {
+          username: msg.author?.username || 'Unknown',
+          id: msg.author?.id || '',
+        },
+        timestamp: msg.timestamp || '',
+        channel_id: channelId,
+      }))
+
+      allMessages.push(...batch)
+
+      // If we got fewer than requested, there are no more messages
+      if (data.length < batchSize) {
+        hasMore = false
+      } else {
+        // Set the cursor to the oldest message ID for next page
+        beforeId = data[data.length - 1].id
+      }
     }
 
-    const data = await res.json()
-
-    if (!Array.isArray(data)) {
-      return { messages: [], error: 'Unexpected Discord API response format' }
-    }
-
-    const messages: DiscordMessage[] = data.map((msg: any) => ({
-      id: msg.id,
-      content: msg.content || '',
-      author: {
-        username: msg.author?.username || 'Unknown',
-        id: msg.author?.id || '',
-      },
-      timestamp: msg.timestamp || '',
-      channel_id: channelId,
-    }))
-
-    return { messages }
+    return { messages: allMessages }
   } catch (error) {
+    if (allMessages.length > 0) {
+      return { messages: allMessages, error: error instanceof Error ? error.message : 'Partial fetch' }
+    }
     return {
       messages: [],
       error: error instanceof Error ? error.message : 'Failed to fetch from Discord',
@@ -78,89 +105,108 @@ async function fetchChannelMessages(
   }
 }
 
+// Fetch all threads (archived + active) from a channel and their messages
+async function fetchAllThreadsForChannel(
+  channelId: string,
+  botToken: string
+): Promise<DiscordMessage[]> {
+  const threadMessages: DiscordMessage[] = []
+  const seenThreadIds = new Set<string>()
+
+  // Helper to fetch messages from a list of threads
+  async function fetchFromThreads(threads: any[]) {
+    for (const thread of threads) {
+      if (seenThreadIds.has(thread.id)) continue
+      seenThreadIds.add(thread.id)
+      const result = await fetchChannelMessages(thread.id, botToken, 500)
+      if (result.messages.length > 0) {
+        threadMessages.push(...result.messages)
+      }
+    }
+  }
+
+  // 1. Archived public threads
+  try {
+    const res = await fetch(
+      `${DISCORD_API_BASE}/channels/${channelId}/threads/archived/public?limit=100`,
+      { headers: { Authorization: `Bot ${botToken}`, 'Content-Type': 'application/json' } }
+    )
+    if (res.ok) {
+      const data = await res.json()
+      const threads = Array.isArray(data.threads) ? data.threads : []
+      await fetchFromThreads(threads)
+    }
+  } catch {}
+
+  // 2. Archived private threads
+  try {
+    const res = await fetch(
+      `${DISCORD_API_BASE}/channels/${channelId}/threads/archived/private?limit=100`,
+      { headers: { Authorization: `Bot ${botToken}`, 'Content-Type': 'application/json' } }
+    )
+    if (res.ok) {
+      const data = await res.json()
+      const threads = Array.isArray(data.threads) ? data.threads : []
+      await fetchFromThreads(threads)
+    }
+  } catch {}
+
+  return threadMessages
+}
+
 // Also fetch threads within a channel (forum/thread channels)
 async function fetchThreadMessages(
   channelId: string,
   botToken: string,
-  limit: number = 100
+  serverId?: string
 ): Promise<{ messages: DiscordMessage[]; error?: string }> {
-  // First try fetching as a regular channel
-  const directResult = await fetchChannelMessages(channelId, botToken, limit)
+  // Fetch direct channel messages with pagination (up to 500)
+  const directResult = await fetchChannelMessages(channelId, botToken, 500)
 
-  // Also try to get active threads in this channel
-  try {
-    const threadsRes = await fetch(
-      `${DISCORD_API_BASE}/channels/${channelId}/threads/archived/public`,
-      {
-        headers: {
-          Authorization: `Bot ${botToken}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    )
+  // Fetch threads within this channel
+  const threadMessages = await fetchAllThreadsForChannel(channelId, botToken)
 
-    if (threadsRes.ok) {
-      const threadsData = await threadsRes.json()
-      const threads = Array.isArray(threadsData.threads) ? threadsData.threads : []
-
-      // Fetch messages from each thread (limit to first 10 threads to avoid rate limits)
-      const threadMessages: DiscordMessage[] = []
-      for (const thread of threads.slice(0, 10)) {
-        const threadResult = await fetchChannelMessages(thread.id, botToken, 50)
-        if (threadResult.messages.length > 0) {
-          threadMessages.push(...threadResult.messages)
+  // Also try active threads from the guild if serverId is provided
+  if (serverId) {
+    try {
+      const activeRes = await fetch(
+        `${DISCORD_API_BASE}/guilds/${serverId}/threads/active`,
+        { headers: { Authorization: `Bot ${botToken}`, 'Content-Type': 'application/json' } }
+      )
+      if (activeRes.ok) {
+        const activeData = await activeRes.json()
+        const activeThreads = Array.isArray(activeData.threads) ? activeData.threads : []
+        // Filter to threads belonging to this channel
+        const channelThreads = activeThreads.filter((t: any) => t.parent_id === channelId)
+        const seenIds = new Set(threadMessages.map(m => m.channel_id))
+        for (const thread of channelThreads) {
+          if (seenIds.has(thread.id)) continue
+          const result = await fetchChannelMessages(thread.id, botToken, 500)
+          if (result.messages.length > 0) {
+            threadMessages.push(...result.messages)
+          }
         }
       }
-
-      return {
-        messages: [...directResult.messages, ...threadMessages],
-        error: directResult.error,
-      }
-    }
-  } catch {
-    // Thread fetch failed — just return direct messages
+    } catch {}
   }
 
-  // Also try active threads
-  try {
-    const activeRes = await fetch(
-      `${DISCORD_API_BASE}/guilds/${channelId}/threads/active`,
-      {
-        headers: {
-          Authorization: `Bot ${botToken}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    )
-
-    if (activeRes.ok) {
-      const activeData = await activeRes.json()
-      const activeThreads = Array.isArray(activeData.threads) ? activeData.threads : []
-
-      const threadMessages: DiscordMessage[] = []
-      for (const thread of activeThreads.slice(0, 10)) {
-        const threadResult = await fetchChannelMessages(thread.id, botToken, 50)
-        if (threadResult.messages.length > 0) {
-          threadMessages.push(...threadResult.messages)
-        }
-      }
-
-      return {
-        messages: [...directResult.messages, ...threadMessages],
-        error: directResult.error,
-      }
+  // Deduplicate messages by ID
+  const seenMsgIds = new Set<string>()
+  const allMessages: DiscordMessage[] = []
+  for (const msg of [...directResult.messages, ...threadMessages]) {
+    if (!seenMsgIds.has(msg.id)) {
+      seenMsgIds.add(msg.id)
+      allMessages.push(msg)
     }
-  } catch {
-    // Active thread fetch failed — just return what we have
   }
 
-  return directResult
+  return { messages: allMessages, error: directResult.error }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { bot_token, channel_ids, channel_labels } = body
+    const { bot_token, channel_ids, channel_labels, server_id } = body
 
     if (!bot_token) {
       return NextResponse.json(
@@ -204,7 +250,7 @@ export async function POST(request: NextRequest) {
       const channelId = validChannels[i].trim()
       const label = labels[i] || `channel-${i}`
 
-      const { messages, error } = await fetchThreadMessages(channelId, bot_token)
+      const { messages, error } = await fetchThreadMessages(channelId, bot_token, server_id)
 
       results.push({
         channel_id: channelId,
